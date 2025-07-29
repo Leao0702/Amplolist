@@ -5,8 +5,8 @@ from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 from pytz import timezone
 
-# Atualização automática a cada 2 minutos
-st_autorefresh(interval=120 * 1000, key="auto_refresh")
+# Atualização automática a cada 5 minutos
+st_autorefresh(interval=300 * 1000, key="auto_refresh")
 
 # Formata data ISO em dd/mm/yyyy
 def formatar_data(data_iso):
