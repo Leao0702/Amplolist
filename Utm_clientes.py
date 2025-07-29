@@ -8,18 +8,18 @@ from pytz import timezone
 # Atualização automática a cada 2 minutos
 st_autorefresh(interval=120 * 1000, key="auto_refresh")
 
-# Função para formatar data ISO
+# Formata data ISO em dd/mm/yyyy
 def formatar_data(data_iso):
     try:
-        return datetime.fromisoformat(data_iso.replace("Z", "+00:00"))
+        return datetime.fromisoformat(data_iso.replace("Z", "+00:00")).strftime("%d/%m/%Y")
     except:
-        return None
+        return ""
 
-# Carregar dados da API
-def carregar_dados_utm_clientes():
+# Função para buscar dados
+def carregar_dados():
     url_managers = "https://tracker-api.avalieempresas.live/api/managers"
     url_base_tx = "https://tracker-api.avalieempresas.live/api/transactions/manager/"
-    transacoes = []
+    registros = []
 
     try:
         res_managers = requests.get(url_managers)
@@ -31,6 +31,7 @@ def carregar_dados_utm_clientes():
 
     for manager in managers:
         manager_id = manager.get("manager_id")
+        manager_name = manager.get("name")
         page = 1
 
         while True:
@@ -46,43 +47,55 @@ def carregar_dados_utm_clientes():
                     break
 
                 for tx in txs:
-                    transacoes.append({
+                    registros.append({
+                        "Manager Name": manager_name,
                         "UTM Source": tx.get("utm_source", ""),
-                        "Client Name": tx.get("clientName", ""),
-                        "Client Email": tx.get("clientEmail", ""),
-                        "Client Phone": tx.get("clientPhone", ""),
-                        "Client CPF": tx.get("clientCpf", ""),
+                        "Created At": formatar_data(tx.get("createdAt", "")),
                     })
 
                 page += 1
             except Exception as e:
-                st.warning(f"Erro nas transações do gerente {manager_id}: {e}")
+                st.warning(f"Erro ao carregar transações de {manager_name}: {e}")
                 break
 
-    return pd.DataFrame(transacoes)
+    df = pd.DataFrame(registros)
+    return df
 
-# Página
-st.set_page_config(page_title="UTM e Clientes", layout="wide")
-st.title("📋 UTM Sources + Informações dos Clientes")
+# Configuração da página
+st.set_page_config(page_title="Painel UTM Consolidado", layout="wide")
+st.title("📋 UTM Sources por Gerente")
 
-# Hora da atualização
+# Hora de atualização
 br_tz = timezone("America/Sao_Paulo")
 hora_atual = datetime.now(br_tz).strftime('%H:%M:%S')
 st.caption(f"⏰ Última atualização: {hora_atual}")
 
-# Carregar dados
-df = carregar_dados_utm_clientes()
+# Carrega dados
+df = carregar_dados()
 if df.empty:
     st.warning("Nenhum dado encontrado.")
     st.stop()
 
-# Mostrar tabela
-st.dataframe(df, use_container_width=True)
+# Remove duplicações
+df = df.drop_duplicates(subset=["Manager Name", "UTM Source", "Created At"])
 
-# Baixar CSV
+# Sidebar: filtro por UTM Source
+st.sidebar.header("🔎 Filtrar por UTM Source")
+utm_opcoes = df["UTM Source"].dropna().unique().tolist()
+utm_selecionada = st.sidebar.selectbox("Selecione uma UTM", options=["Todas"] + utm_opcoes)
+
+if utm_selecionada != "Todas":
+    df_filtrado = df[df["UTM Source"] == utm_selecionada]
+else:
+    df_filtrado = df
+
+# Mostra a tabela final
+st.dataframe(df_filtrado, use_container_width=True)
+
+# Botão de download
 st.download_button(
     label="⬇️ Baixar CSV",
-    data=df.to_csv(index=False).encode("utf-8"),
-    file_name="utm_clientes.csv",
+    data=df_filtrado.to_csv(index=False).encode("utf-8"),
+    file_name="utm_gerentes.csv",
     mime="text/csv"
 )
